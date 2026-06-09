@@ -4,6 +4,7 @@ import com.sudombia.App;
 import com.sudombia.logic.SudokuBoard;
 import com.sudombia.logic.SudokuGenerator;
 import com.sudombia.model.Ecosystem;
+import com.sudombia.model.Logbook;
 import com.sudombia.model.Player;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -13,11 +14,14 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
  * Controlador del tablero de Sudoku.
@@ -35,8 +39,10 @@ public class SudokuController {
 
     private SudokuBoard board;
     private Player player;
+    private Logbook logbook;
     private Ecosystem ecosystem;
     private SudokuGenerator.Difficulty difficulty;
+    private List<Ecosystem> ecosystems;
 
     // Celda actualmente seleccionada
     private int selectedRow = -1;
@@ -62,20 +68,22 @@ public class SudokuController {
     /**
      * Recibe los datos desde MapController y construye el tablero.
      */
-    public void setup(Player player, Ecosystem ecosystem,
-                      SudokuGenerator.Difficulty difficulty) {
+    public void setup(Player player, Logbook logbook, List<Ecosystem> ecosystems,
+                    Ecosystem ecosystem, SudokuGenerator.Difficulty difficulty) {
         this.player = player;
+        this.logbook = logbook;
+        this.ecosystems = ecosystems;
         this.ecosystem = ecosystem;
         this.difficulty = difficulty;
 
         ecosystemLabel.setText(ecosystem.getName());
         difficultyLabel.setText("Dificultad: " + difficulty.name());
+        player.resetHints();
         updateHintsLabel();
         messageLabel.setText("");
 
         SudokuGenerator generator = new SudokuGenerator();
         board = generator.generate(difficulty);
-
         buildGrid();
     }
 
@@ -262,20 +270,151 @@ public class SudokuController {
     }
 
     private void onPuzzleSolved() {
-        int sudokuIndex = getSudokuIndex();
+        int sudokuIndex = ecosystem.getObtainedPiecesCount();
         ecosystem.unlockPiece(sudokuIndex);
         player.completeSudoku(ecosystem.getName());
 
-        messageLabel.setText("¡Sudoku completado! Pieza " +
-            ecosystem.getObtainedPiecesCount() + "/4 obtenida.");
-        messageLabel.setStyle("-fx-text-fill: #69F0AE; -fx-font-size: 14px;");
-
         checkButton.setDisable(true);
         hintButton.setDisable(true);
+
+        if (ecosystem.isComplete()) {
+            logbook.addSticker(ecosystem);
+            System.out.println("Stickers en logbook: " + logbook.getStickerCount());
+            System.out.println("Ecosistema completo: " + ecosystem.isComplete());
+            showPieceDialog(true);
+        } else {
+            showPieceDialog(false);
+        }
     }
 
-    private int getSudokuIndex() {
-        return ecosystem.getObtainedPiecesCount();
+    /**
+     * Muestra la ventana emergente al ganar una pieza.
+     */
+    private void showPieceDialog(boolean ecosystemComplete) {
+        // Overlay oscuro
+        StackPane overlay = new StackPane();
+        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.7);");
+        overlay.setPrefSize(900, 600);
+
+        // Tarjeta central
+        VBox card = new VBox(16);
+        card.setAlignment(Pos.CENTER);
+        card.setMaxWidth(380);
+        card.setMaxHeight(320);
+        card.setStyle(
+            "-fx-background-color: #16213E;" +
+            "-fx-border-color: #E8C84A;" +
+            "-fx-border-width: 2;" +
+            "-fx-border-radius: 12;" +
+            "-fx-background-radius: 12;" +
+            "-fx-padding: 32;"
+        );
+
+        // Título
+        Label title = new Label(ecosystemComplete
+            ? "¡Ecosistema completo!"
+            : "¡Pieza obtenida!");
+        title.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #E8C84A;");
+
+        // Pieza visual (placeholder hasta tener pixel art)
+        Label piece = new Label("[ PIEZA " + ecosystem.getObtainedPiecesCount() + " ]");
+        piece.setStyle(
+            "-fx-font-size: 24px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-text-fill: #E8C84A;" +
+            "-fx-background-color: #0F3460;" +
+            "-fx-background-radius: 8;" +
+            "-fx-padding: 16 24;"
+        );
+
+        // Info
+        Label info = new Label(ecosystemComplete
+            ? "Sticker agregado a tu Bitácora.\n¡Desbloqueaste el siguiente ecosistema!"
+            : "Pieza " + ecosystem.getObtainedPiecesCount() + "/4 obtenida.\n" + ecosystem.getName());
+        info.setStyle("-fx-font-size: 14px; -fx-text-fill: #C0C0D0;");
+        info.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+        info.setWrapText(true);
+
+        // Botones
+        HBox buttons = new HBox(12);
+        buttons.setAlignment(Pos.CENTER);
+
+        Button closeBtn = new Button("✕ Cerrar");
+        closeBtn.setStyle(
+            "-fx-background-color: #607D8B;" +
+            "-fx-text-fill: white;" +
+            "-fx-font-size: 14px;" +
+            "-fx-background-radius: 8;" +
+            "-fx-padding: 8 20;"
+        );
+
+        Button nextBtn = new Button("Siguiente →");
+        nextBtn.setStyle(
+            "-fx-background-color: #4CAF50;" +
+            "-fx-text-fill: white;" +
+            "-fx-font-size: 14px;" +
+            "-fx-background-radius: 8;" +
+            "-fx-padding: 8 20;"
+        );
+
+        buttons.getChildren().addAll(closeBtn, nextBtn);
+        card.getChildren().addAll(title, piece, info, buttons);
+        overlay.getChildren().add(card);
+
+        // Agregar overlay encima del layout actual
+        StackPane root = (StackPane) sudokuGrid.getScene().getRoot();
+        root.getChildren().add(overlay);
+
+        // Cerrar overlay
+        closeBtn.setOnAction(e -> root.getChildren().remove(overlay));
+
+        // Siguiente sudoku o ir al mapa
+        nextBtn.setOnAction(e -> {
+            root.getChildren().remove(overlay);
+            if (ecosystemComplete) {
+                goToMap();
+            } else {
+                loadNextSudoku();
+            }
+        });
+    }
+
+    private void loadNextSudoku() {
+        try {
+            FXMLLoader loader = new FXMLLoader(
+                getClass().getResource("/com/sudombia/fxml/sudoku.fxml")
+            );
+            Scene scene = new Scene(loader.load(), 900, 600);
+            SudokuController sudokuController = loader.getController();
+            sudokuController.setup(player, logbook, ecosystems, ecosystem,
+                getDifficultyForEcosystem());
+            App.setScene(scene);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private SudokuGenerator.Difficulty getDifficultyForEcosystem() {
+        switch (ecosystem.getObtainedPiecesCount()) {
+            case 1: return SudokuGenerator.Difficulty.MEDIUM;
+            case 2: return SudokuGenerator.Difficulty.HARD;
+            case 3: return SudokuGenerator.Difficulty.EXPERT;
+            default: return SudokuGenerator.Difficulty.EASY;
+        }
+    }
+
+    private void goToMap() {
+        try {
+            FXMLLoader loader = new FXMLLoader(
+                getClass().getResource("/com/sudombia/fxml/map.fxml")
+            );
+            Scene scene = new Scene(loader.load(), 900, 600);
+            MapController mapController = loader.getController();
+            mapController.setup(player, logbook, ecosystems);
+            App.setScene(scene);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private void updateHintsLabel() {
@@ -290,7 +429,7 @@ public class SudokuController {
             );
             Scene scene = new Scene(loader.load(), 900, 600);
             MapController mapController = loader.getController();
-            mapController.setPlayer(player);
+            mapController.setup(player, logbook, ecosystems);
             App.setScene(scene);
         } catch (IOException e) {
             e.printStackTrace();

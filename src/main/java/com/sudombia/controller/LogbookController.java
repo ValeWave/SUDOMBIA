@@ -29,6 +29,7 @@ public class LogbookController {
 
     private Player player;
     private Logbook logbook;
+    private List<Ecosystem> ecosystems;
 
     @FXML
     public void initialize() {
@@ -38,9 +39,11 @@ public class LogbookController {
     /**
      * Recibe player y logbook desde el controlador anterior.
      */
-    public void setup(Player player, Logbook logbook) {
+    public void setup(Player player, Logbook logbook, List<Ecosystem> ecosystems) {
         this.player = player;
         this.logbook = logbook;
+        this.ecosystems = ecosystems;
+        System.out.println("Logbook recibido con stickers: " + logbook.getStickerCount());
         renderStickers();
     }
 
@@ -136,7 +139,10 @@ public class LogbookController {
             FXMLLoader loader = new FXMLLoader(
                 getClass().getResource("/com/sudombia/fxml/menu.fxml")
             );
-            App.setScene(new Scene(loader.load(), 900, 600));
+            Scene scene = new Scene(loader.load(), 900, 600);
+            MenuController menuController = loader.getController();
+            menuController.setup(player, logbook, ecosystems);
+            App.setScene(scene);
         } catch (IOException e) {
             e.printStackTrace();
         }
